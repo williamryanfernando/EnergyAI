@@ -1,0 +1,100 @@
+Project Proposal: "Unit-AI"
+A Hyper-Local Environmental & Energy Assistant for Residential Units
+
+1. Executive Summary
+"Unit-AI" is a project to develop a specialized AI assistant designed to provide hyper-local, relevant, and actionable advice to residents. The system will be an expert on environmental sustainability, energy conservation, and waste management. By leveraging a lightweight, fine-tuned language model, the AI will serve as an expert "face" for green initiatives.
+
+The initial prototype will demonstrate scalability by focusing on two distinct New York locations: a smaller city (Troy) and a large metropolis (New York City). It will be built using Microsoft's Phi-3-mini model, which is powerful enough to provide intelligent responses while being small enough for fine-tuning on consumer-grade hardware. The project's primary goal is to create a proof-of-concept that is accurate, helpful, and adaptable to different municipal regulations.
+
+2. Project Goals & Objectives
+Primary Goal: To develop a conversational AI that can accurately answer resident questions about energy savings, recycling rules, and building-specific environmental procedures for different localities.
+
+Objective 1 (Knowledge): Create comprehensive knowledge bases specific to Troy, NY, and New York City, covering waste management, local recycling policies, and energy-saving techniques for each.
+
+Objective 2 (Accuracy): Fine-tune a base language model to ensure its responses are grounded in the provided local data, preventing misinformation and correctly differentiating between locations.
+
+Objective 3 (Accessibility): Design the system to be easily integrated into a simple front-end (like a web chat interface), making it accessible to residents.
+
+Objective 4 (Scalability): Build the project with a modular architecture that allows for future upgrades, such as switching to a larger model or integrating real-time data from smart devices.
+
+3. Core Idea: The Hyper-Local Expert
+The core idea is to move beyond generic AI assistants, which lack specific, local context. When a resident asks, "Can I recycle this plastic container?" the answer depends entirely on the rules of their municipality.
+
+Unit-AI will be trained to be an expert on these niche topics. It will know:
+
+The exact recycling schedule and rules for both Troy and NYC.
+
+Which specific types of plastics are accepted in each city.
+
+Where building-specific facilities like compost or e-waste bins are located.
+
+Actionable energy-saving tips relevant to the climate and building types in different regions of New York.
+
+4. Technology Stack
+Base Language Model: microsoft/phi-3-mini-4k-instruct. This model is chosen for its excellent performance-to-size ratio, making it ideal for fine-tuning on an 8GB VRAM GPU.
+
+Deep Learning Framework: PyTorch. The industry standard for building and training neural networks.
+
+Fine-Tuning & Model Management: Hugging Face Ecosystem
+
+transformers: For loading the base model and tokenizer.
+
+datasets: For creating and managing the instruction dataset.
+
+peft (Parameter-Efficient Fine-Tuning): To use the LoRA (Low-Rank Adaptation) technique.
+
+bitsandbytes: For model quantization (loading the model in 4-bit precision).
+
+Programming Language: Python 3.10+
+
+5. Data Acquisition & Strategy
+The success of this project hinges on a high-quality, custom dataset covering both municipalities.
+
+Source 1a: Official Municipal Documents (Troy, NY)
+
+Data Idea: Scour the official City of Troy website (https://www.troyny.gov/) for PDFs, guides, and web pages on sanitation and recycling.
+
+Example: Download the "Single Stream Recycling Guide" to extract rules.
+
+Source 1b: Official Municipal Documents (New York City)
+
+Data Idea: Gather information from the NYC Department of Sanitation (DSNY) website (https://www.nyc.gov/assets/dsny/site/home), which has extensive rules for recycling, organics, and e-waste.
+
+Example: "Instruction: In Brooklyn, how do I dispose of a used air conditioner? Output: In NYC, it is illegal to discard air conditioners with regular trash. You must schedule a free curbside pickup appointment with DSNY."
+
+Source 2: State-Level Energy Authorities (NYSERDA)
+
+Data Idea: Visit the NYSERDA (https://www.nyserda.ny.gov/) website for energy-saving tips relevant to all New Yorkers.
+
+Source 3: Building-Specific Information (Hypothetical)
+
+Data Idea: Create custom data for fictional buildings in both Troy and NYC.
+
+Example: "Instruction: Where is the e-waste bin for the apartment in Troy? Output: The building has a designated e-waste bin in the basement next to the laundry room."
+
+6. Model Training Plan
+The model will be trained using a supervised fine-tuning approach on a curated instruction dataset.
+
+Dataset Creation:
+
+Manually create a JSON file containing at least 400-500 high-quality instruction/output pairs covering both Troy and NYC.
+
+Crucially, instructions must specify the location to teach the model to differentiate. For example: {"instruction": "In NYC, what plastics can I recycle?", "output": "..."}.
+
+Environment Setup:
+
+Set up a Python virtual environment and install all the libraries listed in the Technology Stack.
+
+Training Script Development:
+
+Write a Python script that loads the phi-3-mini model using 4-bit quantization, configures LoRA adapters, loads the dataset, and uses the SFTTrainer from the trl library to run the training process.
+
+Training Execution:
+
+The training will be run locally. The process is expected to take a few hours on a consumer GPU like a 3060 Ti.
+
+Saving and Inference:
+
+After training, the script will save the newly trained LoRA adapter weights.
+
+For inference, a separate script will load the original phi-3-mini model and merge it with the trained adapter weights to create the final, specialized Unit-AI.
