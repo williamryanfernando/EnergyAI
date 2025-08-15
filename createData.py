@@ -1,68 +1,96 @@
+import os
+import json
 import requests
 import pandas as pd
-import json
-import os
+import random
 from datetime import datetime
+from dateutil import tz
 
-OUTPUT_FILE = "energy_dataset.json"
-USE_EIA = True  # If False, load from LOCAL_CSV
-LOCAL_CSV = "sample_energy_data.csv"
-EIA_API_KEY = "YOUR_EIA_API_KEY"
-EIA_SERIES_ID = "EBA.US48-ALL.D.H"  
-NUM_SAMPLES = 200
+OUTPUT_JSONL = "energy_dataset_multi.jsonl"
+OUTPUT_JSON = "energy_dataset_multi.json"
+NUM_NUMERIC_SAMPLES_PER_SOURCE = 200
+NUM_EXPLANATION_SAMPLES = 200
+NUM_TIP_SAMPLES = 200
+NUM_APPLIANCE_COMPARISONS_PER_FILE = 50
 
-def fetch_eia_data(api_key, series_id):
-    url = f"https://api.eia.gov/v2/electricity/rto/region-data/data/?api_key={api_key}&series_id={series_id}"
-    r = requests.get(url)
-    if r.status_code != 200:
-        raise Exception(f"EIA API request failed: {r.status_code}")
-    data = r.json()
-    df = pd.DataFrame(data["response"]["data"])
-    df["datetime"] = pd.to_datetime(df["period"])
-    return df
+EIA_API_KEY = os.environ.get("EIA_API_KEY", "")
+EIA_SERIES_IDS = [
+    "EBA.US48-ALL.D.H",
+]
 
-def load_local_csv(path):
-    df = pd.read_csv(path)
-    if "datetime" not in df.columns:
-        raise Exception("Local CSV must have a 'datetime' column")
-    df["datetime"] = pd.to_datetime(df["datetime"])
-    return df
+NREL_API_KEY = os.environ.get("NREL_API_KEY", "")
+NREL_PV_WATTS = False
+NREL_CONFIG = {
+    "system_capacity": 4.0,
+    "azimuth": 180,
+    "tilt": 20,
+    "lat": 40.0,
+    "lon": -105.0,
+    "dataset": "intl",
+}
 
-def generate_qa_pairs(df, num_samples=100):
-    qa_pairs = []
+LOCAL_CSVS = []
+
+EFFICIENCY_TIPS = [
+    "Switch to LED lighting to reduce electricity use significantly compared with incandescent bulbs.",
+    "Install a programmable or smart thermostat to reduce HVAC runtime when the house is unoccupied.",
+    "Seal air leaks around doors and windows and add insulation to reduce heating and cooling losses.",
+    "Unplug or switch off devices that draw standby power to avoid phantom loads.",
+    "Wash clothes in cold water and run full loads to save on water heating and pipeline energy.",
+    "Consider adding energy storage (battery) if you have solar to shift self-consumption to peak hours.",
+    "Perform regular maintenance on HVAC units (clean filters, service compressor) to keep efficiency high.",
+    "Upgrade to Energy Star-rated appliances to reduce long-term electricity consumption.",
+    "Use a clothesline or drying rack to cut dryer energy use when weather allows.",
+    "Schedule heavy loads (dishwasher, laundry) to run at off-peak hours if on time-of-use rates."
+]
+
+FLOW_EXPLANATIONS = [
+    "Electricity flows from the grid or local generation into your service panel and then to individual branch circuits that feed appliances and outlets.",
+    "Solar panels create DC power that first passes through an inverter to become AC for household use; excess AC can be exported to the grid or sent to batteries.",
+    "A home battery charges when generation exceeds demand or during low-price periods, and discharges to supply loads during peak or outage periods.",
+    "Heat pumps move heat rather than generate it, using electricity to transfer thermal energy between inside and outside the home.",
+    "HVAC consumes a lot of power because it runs compressors and fans; its usage spikes high when the system cycles during extreme weather."
+]
+
+random.seed(42)
+
+def safe_datetime_parse(series):
+    if isinstance(series, pd.Series):
+        return pd.to_datetime(series, errors="coerce")
+    return pd.to_datetime(series, errors="coerce")
+
+def normalize_load_df(df, datetime_col_candidates=None, numeric_prefix=None):
+    if datetime_col_candidates is None:
+        datetime_col_candidates = ["datetime", "timestamp", "time", "date", "Date", "ts"]
+    dt_col = None
+    for c in datetime_col_candidates:
+        if c in df.columns:
+            dt_col = c
+            break
+    if dt_col is None:
+        for c in df.columns:
+            try:
+                parsed = pd.to_datetime(df[c], errors="coerce")
+                if parsed.notna().sum() > 0:
+                    dt_col = c
+                    break
+            except Exception:
+                continue
+    if dt_col is None:
+        raise ValueError("No datetime-like column found in CSV")
+    df["datetime"] = safe_datetime_parse(df[dt_col])
+    df = df.dropna(subset=["datetime"])
+    numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+    if len(numeric_cols) == 0:
+        for c in df.columns:
+            if c == "datetime":
+                continue
+            coerced = pd.to_numeric(df[c], errors="coerce")
+            if coerced.notna().sum() > 0:
+                df[c] = coerced
+        numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+    if len(numeric_cols) == 0:
+        raise ValueError("No numeric columns found in CSV for energy values")
     df = df.sort_values("datetime")
-    usage_col = [c for c in df.columns if c not in ["datetime"]][0]
-
-    for _ in range(num_samples):
-        row = df.sample(1).iloc[0]
-        dt = row["datetime"]
-        usage = row[usage_col]
-        instr = f"What was the energy usage on {dt.strftime('%B %d, %Y at %H:%M')}?"
-        out = f"The energy usage was {usage:.2f} megawatt-hours."
-        qa_pairs.append({"instruction": instr, "output": out})
-
-    for year in df["datetime"].dt.year.unique():
-        yearly = df[df["datetime"].dt.year == year]
-        peak_row = yearly.loc[yearly[usage_col].idxmax()]
-        instr = f"In {year}, when was the peak energy usage and how much was it?"
-        out = f"The peak usage was {peak_row[usage_col]:.2f} MWh on {peak_row['datetime'].strftime('%B %d, %Y at %H:%M')}."
-        qa_pairs.append({"instruction": instr, "output": out})
-
-    return qa_pairs
-
-def save_json(data, path):
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-    print(f"Saved {len(data)} Q&A pairs to {path}")
-
-def main():
-    if USE_EIA:
-        df = fetch_eia_data(EIA_API_KEY, EIA_SERIES_ID)
-    else:
-        df = load_local_csv(LOCAL_CSV)
-
-    qa_pairs = generate_qa_pairs(df, NUM_SAMPLES)
-    save_json(qa_pairs, OUTPUT_FILE)
-
-if __name__ == "__main__":
-    main()
+    df = df.reset_index(drop=True)
+    return df
